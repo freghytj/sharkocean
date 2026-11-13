@@ -100,6 +100,8 @@ local FarmState = {
     COMPUTER_TP_COOLDOWN = 6, -- segundos apos terminar um PC antes de ir pro proximo
     DoBonusPCs = false, -- se false, para quando ComputersLeft chegar a 0
     SaveFirstCaptured = true, -- salva so o 1o capturado da partida (XP), so com Auto Farm ligado
+    Saving = false, -- true enquanto dispara o evento de salvar (pausa o spam do hack)
+    NeedReinteract = false, -- true apos salvar: o autofarm volta pro PC e reinicia o hack
     AutoExit = false,   -- apos PCs (ou sem PC disponivel), vai pra ExitDoor
     AutoServerHop = false, -- apos sair / mid-game ruim, troca de servidor
     AntiBeast = false, -- se true e for fera, hopa
@@ -2442,6 +2444,7 @@ local function doAutoFarmLoop()
             task.wait(0.35)
 
             -- lastTriedKey so e setado ao terminar/abandonar/timeout (evita troca sem motivo)
+            FarmState.NeedReinteract = false
             local timeout = os.clock() + 150
             local abandoned = false
             local finishedHere = false
@@ -2484,6 +2487,26 @@ local function doAutoFarmLoop()
             end
 
             while FarmState.AutoFarmComputers and scriptRunning and os.clock() < timeout do
+                -- salvando capturado (XP): pausa o spam de Action pra nao brigar com o evento da capsula
+                if FarmState.Saving then
+                    task.wait(0.05)
+                    continue
+                end
+                -- terminou de salvar: solta o Action, volta pro lado do PC e reinicia o hack
+                if FarmState.NeedReinteract then
+                    FarmState.NeedReinteract = false
+                    pcall(function() RemoteEvent:FireServer("Input", "Action", false) end)
+                    task.wait(0.1)
+                    if standPos and HRP and HRP.Parent then
+                        HRP.CFrame = CFrame.new(standPos)
+                        HRP.AssemblyLinearVelocity = Vector3.zero
+                        HRP.AssemblyAngularVelocity = Vector3.zero
+                    end
+                    task.wait(0.15)
+                    fireComputerInteract(trigger)
+                    task.wait(0.3)
+                end
+
                 if isComputerDone(computer) then
                     notify("Autofarm", "PC concluido!", "success")
                     markComputerFinished(computer)
@@ -3267,8 +3290,13 @@ task.spawn(function()
             if not target then return end
 
             SaveFirstState.Attempts = SaveFirstState.Attempts + 1
-            fireSavePod(target.pod)
-            task.wait(0.7)
+            FarmState.Saving = true
+            pcall(function()
+                fireSavePod(target.pod)
+                task.wait(0.7)
+            end)
+            FarmState.Saving = false
+            FarmState.NeedReinteract = true
 
             local temp = target.player:FindFirstChild("TempPlayerStatsModule")
             local cap = temp and temp:FindFirstChild("Captured")
