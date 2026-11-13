@@ -1495,8 +1495,9 @@ local FLY_UP_SPEED = 260      -- subida (studs/s)
 local FLY_SIDE_SPEED = 320    -- travessia por cima (studs/s)
 local FLY_DOWN_SPEED = 260    -- descida (studs/s)
 local FLY_EXTRA_HEIGHT = 35   -- altura acima do ponto mais alto (inicio/destino)
+local FLY_EXIT_SPEED = 100    -- voo normal/mais lento, SO pra ir ate a saida (linha reta)
 
-local function teleportTo(partOrPos)
+local function teleportTo(partOrPos, slow)
     if not HRP or not HRP.Parent then return end
 
     local targetPos
@@ -1510,7 +1511,7 @@ local function teleportTo(partOrPos)
 
     local startPos = HRP.Position
     local distance = (targetPos - startPos).Magnitude
-    if distance < 25 then
+    if distance < (slow and 3 or 25) then
         HRP.CFrame = CFrame.new(targetPos)
         HRP.AssemblyLinearVelocity = Vector3.zero
         HRP.AssemblyAngularVelocity = Vector3.zero
@@ -1528,13 +1529,19 @@ local function teleportTo(partOrPos)
         end
     end
 
-    -- rota: sobe -> voa por cima do PC -> desce
-    local topY = math.max(startPos.Y, targetPos.Y) + FLY_EXTRA_HEIGHT
-    local waypoints = {
-        { Vector3.new(startPos.X, topY, startPos.Z), FLY_UP_SPEED },
-        { Vector3.new(targetPos.X, topY, targetPos.Z), FLY_SIDE_SPEED },
-        { targetPos, FLY_DOWN_SPEED },
-    }
+    local waypoints
+    if slow then
+        -- saida: voo normal em linha reta, velocidade moderada (rapido demais nao detecta)
+        waypoints = { { targetPos, FLY_EXIT_SPEED } }
+    else
+        -- rota: sobe -> voa por cima do PC -> desce
+        local topY = math.max(startPos.Y, targetPos.Y) + FLY_EXTRA_HEIGHT
+        waypoints = {
+            { Vector3.new(startPos.X, topY, startPos.Z), FLY_UP_SPEED },
+            { Vector3.new(targetPos.X, topY, targetPos.Z), FLY_SIDE_SPEED },
+            { targetPos, FLY_DOWN_SPEED },
+        }
+    end
 
     local totalTime = 0
     do
@@ -1606,6 +1613,11 @@ local function teleportTo(partOrPos)
             part.CanCollide = true
         end
     end
+end
+
+-- ir ate a saida/porta: voo normal e mais lento
+local function teleportToExit(p)
+    return teleportTo(p, true)
 end
 
 local function fireComputerInteract(trigger)
@@ -2212,11 +2224,11 @@ local function doAutoExit()
                     elevateAtExit(doorPivot)
                     task.wait(0.1)
                 else
-                    teleportTo(pos)
+                    teleportToExit(pos)
                     break
                 end
             end
-            teleportTo(pos)
+            teleportToExit(pos)
             FarmState.EscapedThisRound = true
             maybeServerHopAfterRound()
             return true
@@ -2224,7 +2236,7 @@ local function doAutoExit()
 
         notify("Auto Exit", "Abrindo porta...", "computer")
         local tpos = trigger:IsA("BasePart") and (trigger.Position + Vector3.new(0, 3, 0)) or trigger:GetPivot().Position + Vector3.new(0, 3, 0)
-        teleportTo(tpos)
+        teleportToExit(tpos)
         task.wait(0.25)
 
         local openTimeout = os.clock() + 16
@@ -2251,7 +2263,7 @@ local function doAutoExit()
             else
                 beastNearSince = nil
                 if HRP and (HRP.Position - base).Magnitude > 8 then
-                    teleportTo(base + Vector3.new(0, 3, 0))
+                    teleportToExit(base + Vector3.new(0, 3, 0))
                 end
                 interactExitTrigger(trigger)
             end
@@ -2275,7 +2287,7 @@ local function doAutoExit()
                 switches = switches + 1
                 continue
             end
-            teleportTo(pos)
+            teleportToExit(pos)
         end
         FarmState.EscapedThisRound = true
         maybeServerHopAfterRound()
