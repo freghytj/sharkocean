@@ -3272,6 +3272,29 @@ local function fireSavePod(pod)
     trig.CFrame = oldPos
 end
 
+-- ja soltou da capsula? (Captured desligou OU a capsula nao segura mais o corpo dele)
+local function podIsFreed(target)
+    local temp = target.player:FindFirstChild("TempPlayerStatsModule")
+    local cap = temp and temp:FindFirstChild("Captured")
+    if cap and cap.Value == false then return true end
+    local trig = target.pod and target.pod:FindFirstChild("PodTrigger")
+    local torsoVal = trig and trig:FindFirstChild("CapturedTorso")
+    local torso = torsoVal and torsoVal.Value
+    local char = target.player.Character
+    if not torso or not char or not torso:IsDescendantOf(char) then return true end
+    return false
+end
+
+local function amIDown()
+    local tempMe = LP:FindFirstChild("TempPlayerStatsModule")
+    if not tempMe then return false end
+    for _, n in ipairs({ "Ragdoll", "Escaped", "Captured" }) do
+        local v = tempMe:FindFirstChild(n)
+        if v and v.Value == true then return true end
+    end
+    return false
+end
+
 task.spawn(function()
     while scriptRunning do
         pcall(function()
@@ -3290,22 +3313,30 @@ task.spawn(function()
             if not target then return end
 
             SaveFirstState.Attempts = SaveFirstState.Attempts + 1
+
+            -- o resgate precisa de varios disparos seguidos (como o Auto Save TODOS): spam ate soltar (max 8s)
+            local freed = false
             FarmState.Saving = true
             pcall(function()
-                fireSavePod(target.pod)
-                task.wait(0.7)
+                local t0 = os.clock()
+                while os.clock() - t0 < 8 and scriptRunning and FarmState.AutoFarmComputers do
+                    if not target.player.Parent or amIDown() then break end
+                    fireSavePod(target.pod)
+                    task.wait(0.15)
+                    if podIsFreed(target) then freed = true break end
+                end
             end)
             FarmState.Saving = false
             FarmState.NeedReinteract = true
 
-            local temp = target.player:FindFirstChild("TempPlayerStatsModule")
-            local cap = temp and temp:FindFirstChild("Captured")
-            if cap and cap.Value == false then
+            if freed then
                 SaveFirstState.Done = true
                 notify("Autofarm", "Salvou " .. target.player.Name .. " (XP). Nao salva mais nessa partida", "save")
-            elseif SaveFirstState.Attempts >= 6 then
+            elseif SaveFirstState.Attempts >= 2 then
                 SaveFirstState.Done = true
-                notify("Autofarm", "Nao consegui salvar o capturado", "error")
+                local temp = target.player:FindFirstChild("TempPlayerStatsModule")
+                local cap = temp and temp:FindFirstChild("Captured")
+                notify("Autofarm", "Nao consegui salvar " .. target.player.Name .. " (Captured=" .. tostring(cap and cap.Value) .. ")", "error")
             end
         end)
         task.wait(0.3)
