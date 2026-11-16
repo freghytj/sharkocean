@@ -4913,33 +4913,6 @@ local function farmingPCsStillPending()
     return true
 end
 
--- ===== Kick / desconexao -> server hop =====
-do
-    local function onKicked()
-        if not scriptRunning or not FarmState.AutoServerHop then return end
-        if FarmState.Hopping then return end -- erro de teleport durante o proprio hop: ignora
-        notify("Server Hop", "Kick/desconexao detectado. Trocando de servidor...", "system")
-        doServerHop()
-    end
-
-    -- mensagem de erro/desconexao do Roblox
-    pcall(function()
-        game:GetService("GuiService").ErrorMessageChanged:Connect(function(msg)
-            if msg and msg ~= "" then onKicked() end
-        end)
-    end)
-
-    -- tela de erro (ErrorPrompt) que aparece quando leva kick
-    task.spawn(function()
-        pcall(function()
-            local overlay = CoreGui:WaitForChild("RobloxPromptGui", 15):WaitForChild("promptOverlay", 15)
-            overlay.ChildAdded:Connect(function(child)
-                if child.Name == "ErrorPrompt" then onKicked() end
-            end)
-        end)
-    end)
-end
-
 -- Auto Server Hop
 -- - INTERMISSION / GAME OVER / LOADING: fica
 -- - Partida rolando e você FORA da RoundBar: hop (mesmo com AutoFarm ligado)
